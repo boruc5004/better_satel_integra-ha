@@ -2,7 +2,8 @@
 
 Covers the 2026-07-18 field issue: an explicit cover.stop_cover marked the
 cover fully open/closed, and without assumed_state the HA frontend then
-disabled one direction.
+disabled one direction. An interrupted run records "open" (partially open),
+never "closed".
 """
 import re
 import sys
@@ -36,12 +37,15 @@ def test_natural_completion_records_endpoint():
     assert t.last_direction == CLOSED
 
 
-def test_explicit_stop_leaves_position_unknown():
+def test_explicit_stop_records_partially_open():
     t = RollerStateTracker()
     edge(t, was_down=True)          # fully closed
-    t.note_stop_requested(moving=True)   # user hits Stop mid-travel...
+    t.note_stop_requested(moving=True)   # user hits Stop mid-travel up...
     edge(t, was_up=True)                 # ...and the up output falls
-    assert t.last_direction is None      # midway, not "open"
+    assert t.last_direction == OPEN      # partially open = open, never "closed"
+    t.note_stop_requested(moving=True)   # and stopping mid-close...
+    edge(t, was_down=True)
+    assert t.last_direction == OPEN      # ...must NOT record "closed"
 
 
 def test_stop_while_stationary_does_not_poison_next_movement():
@@ -70,8 +74,8 @@ def test_new_movement_supersedes_pending_stop():
 def test_stop_intent_consumed_once():
     t = RollerStateTracker()
     t.note_stop_requested(moving=True)
-    edge(t, was_up=True)                 # interrupted run -> unknown
-    assert t.last_direction is None
+    edge(t, was_up=True)                 # interrupted run -> partially open
+    assert t.last_direction == OPEN
     edge(t, was_down=True)               # next run completes naturally
     assert t.last_direction == CLOSED
 

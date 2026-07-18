@@ -46,15 +46,15 @@ class RollerStateTracker:
         """Process an output-state transition.
 
         On a falling edge (movement -> both outputs off): an interrupted run
-        leaves the position unknown; an uninterrupted one ended at the
-        endpoint of its direction.
+        left the cover partially open ("open" — it is not fully closed); an
+        uninterrupted one ended at the endpoint of its direction.
         """
         if up_active or down_active:
             return  # still (or again) moving; edges are handled when it ends
         if not (was_up_active or was_down_active):
             return  # no movement ended; nothing to learn
         if self._stop_requested:
-            self.last_direction = None
+            self.last_direction = OPEN  # stopped midway = not fully closed
         elif was_up_active:
             self.last_direction = OPEN
         elif was_down_active:

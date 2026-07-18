@@ -48,7 +48,8 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
 
     The protocol exposes only output states, never a position. The last
     *uninterrupted* run infers the endpoint (open/closed); a run ended by an
-    explicit stop command leaves the position unknown. Physical wall-button
+    explicit stop command records "open" (a cover stopped midway is
+    partially open, never fully closed). Physical wall-button
     stops cannot be distinguished from natural completion in the protocol
     data, so the entity is assumed-state: Home Assistant keeps both
     directions commandable regardless of the recorded state.
