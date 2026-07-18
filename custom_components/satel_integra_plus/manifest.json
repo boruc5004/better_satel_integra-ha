@@ -1,0 +1,14 @@
+{
+  "domain": "satel_integra_plus",
+  "name": "Satel INTEGRA Plus",
+  "codeowners": [
+    "@boruc5004"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/boruc5004/better_satel_integra-ha",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/boruc5004/better_satel_integra-ha/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

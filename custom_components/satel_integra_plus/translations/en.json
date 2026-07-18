@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Satel INTEGRA",
+        "description": "ETHM-1 Plus integration port (unencrypted). The user code is used for control commands (outputs, arming) — create a dedicated panel user for Home Assistant.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "user_code": "Panel user code",
+          "code_prefix": "Code prefix (if the panel uses prefixes)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the panel.",
+      "panel_busy": "The integration port is busy — another client (e.g. an old integration) is connected. Disable it and retry.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This panel is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Satel INTEGRA Plus options",
+        "data": {
+          "arm_home_mode": "Panel arm mode used for Arm Home (1-3)",
+          "arm_night_mode": "Panel arm mode used for Arm Night (1-3)",
+          "comfort_output": "Output number toggling comfort/eco heating",
+          "skip_zone_patterns": "Zone name patterns to skip (comma separated)",
+          "gate_state_zones": "Gate output → state zone map (JSON)",
+          "climate_bindings": "Thermostat output → temperature zone map (JSON)",
+          "force_arm": "Force-arm automatically when zones are violated (0x11)"
+        }
+      }
+    },
+    "error": {
+      "invalid_json": "One of the JSON mappings is invalid."
+    }
+  }
+}

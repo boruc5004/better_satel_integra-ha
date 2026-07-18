@@ -1,0 +1,6 @@
+rediscover:
+  name: Rediscover panel devices
+  description: >-
+    Drops the cached device list and re-enumerates partitions, zones and
+    outputs from the panel (takes about a minute). Use after changing the
+    panel configuration in DLOADX.

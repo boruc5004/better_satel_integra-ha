@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Połączenie z Satel INTEGRA",
+        "description": "Port integracji ETHM-1 Plus (bez szyfrowania). Hasło użytkownika służy do sterowania (wyjścia, uzbrajanie) — najlepiej utwórz w centrali osobnego użytkownika dla Home Assistant.",
+        "data": {
+          "host": "Adres",
+          "port": "Port",
+          "user_code": "Hasło użytkownika centrali",
+          "code_prefix": "Prefiks (jeśli centrala używa prefiksów)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie można połączyć się z centralą.",
+      "panel_busy": "Port integracji zajęty — podłączony jest inny klient (np. stara integracja). Wyłącz ją i spróbuj ponownie.",
+      "unknown": "Nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "Ta centrala jest już skonfigurowana."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Satel INTEGRA Plus",
+        "data": {
+          "arm_home_mode": "Tryb uzbrojenia centrali dla „Arm Home” (1-3)",
+          "arm_night_mode": "Tryb uzbrojenia centrali dla „Arm Night” (1-3)",
+          "comfort_output": "Numer wyjścia przełączającego temp. komfortową/ekonomiczną",
+          "skip_zone_patterns": "Wzorce nazw wejść do pominięcia (po przecinku)",
+          "gate_state_zones": "Mapa wyjście bramy → wejście stanu (JSON)",
+          "climate_bindings": "Mapa wyjście termostatu → wejście temperatury (JSON)",
+          "force_arm": "Wymuś uzbrojenie przy naruszonych wejściach (0x11)"
+        }
+      }
+    },
+    "error": {
+      "invalid_json": "Jedna z map JSON jest niepoprawna."
+    }
+  }
+}
