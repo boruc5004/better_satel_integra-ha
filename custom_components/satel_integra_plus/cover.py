@@ -23,6 +23,7 @@ from .entity import SatelEntity
 from .mapping import CoverDesc, GateDesc
 from .pysatel.const import Cmd
 from .pysatel.monitor import SatelHub
+from .roller import CLOSED, OPEN, RollerStateTracker
 
 
 async def async_setup_entry(
@@ -45,11 +46,15 @@ async def async_setup_entry(
 class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
     """A roller blind driven by an up/down output pair.
 
-    The protocol exposes only output states, so position is unknown; we track
-    the last completed direction to report open/closed and show movement
-    while an output is active.
+    The protocol exposes only output states, never a position. The last
+    *uninterrupted* run infers the endpoint (open/closed); a run ended by an
+    explicit stop command leaves the position unknown. Physical wall-button
+    stops cannot be distinguished from natural completion in the protocol
+    data, so the entity is assumed-state: Home Assistant keeps both
+    directions commandable regardless of the recorded state.
     """
 
+    _attr_assumed_state = True
     _attr_device_class = CoverDeviceClass.SHUTTER
     _attr_supported_features = (
         CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
@@ -60,7 +65,7 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
         self._up = desc.up_output
         self._down = desc.down_output
         self._is_group = desc.is_group
-        self._last_direction: str | None = None  # "open" / "closed"
+        self._tracker = RollerStateTracker()
         self._attr_extra_state_attributes = {
             "up_output": desc.up_output,
             "down_output": desc.down_output,
@@ -70,26 +75,28 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if (last := await self.async_get_last_state()) is not None:
-            if last.state in ("open", "closed"):
-                self._last_direction = last.state
+            if last.state in (OPEN, CLOSED):
+                self._tracker.last_direction = last.state
 
     def _state_snapshot(self) -> Any:
+        # NOTE: _hub_updated reads indexes 1 (up) and 2 (down) of this tuple
+        # as the previous output states — keep the field order stable
         return (
             self._hub.available,
             self._hub.output_active(self._up),
             self._hub.output_active(self._down),
-            self._last_direction,
+            self._tracker.last_direction,
         )
 
     def _hub_updated(self) -> None:
-        # falling edge of a movement output => remember the final position
-        if not self._hub.output_active(self._up) and not self._hub.output_active(self._down):
-            was = self._snapshot
-            if isinstance(was, tuple) and len(was) >= 3:
-                if was[1]:  # up was running
-                    self._last_direction = "open"
-                elif was[2]:  # down was running
-                    self._last_direction = "closed"
+        was = self._snapshot
+        was_movement = isinstance(was, tuple) and len(was) >= 3
+        self._tracker.update(
+            self._hub.output_active(self._up),
+            self._hub.output_active(self._down),
+            was_up_active=bool(was_movement and was[1]),
+            was_down_active=bool(was_movement and was[2]),
+        )
         super()._hub_updated()
 
     @property
@@ -104,21 +111,31 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
     def is_closed(self) -> bool | None:
         if self.is_opening or self.is_closing:
             return False
-        if self._last_direction is None:
+        if self._tracker.last_direction is None:
             return None
-        return self._last_direction == "closed"
+        return self._tracker.last_direction == CLOSED
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         await self._hub.client.control_outputs(Cmd.OUTPUTS_ON, {self._up})
+        # a new movement supersedes any not-yet-consumed stop intent
+        self._tracker.clear_stop_request()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         await self._hub.client.control_outputs(Cmd.OUTPUTS_ON, {self._down})
+        self._tracker.clear_stop_request()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
-        # one frame clears both directions
-        await self._hub.client.control_outputs(
-            Cmd.OUTPUTS_OFF, {self._up, self._down}
-        )
+        # flag only when actually moving, so stopping a stationary cover
+        # cannot poison the next movement's endpoint inference
+        self._tracker.note_stop_requested(self.is_opening or self.is_closing)
+        try:
+            # one frame clears both directions
+            await self._hub.client.control_outputs(
+                Cmd.OUTPUTS_OFF, {self._up, self._down}
+            )
+        except BaseException:  # incl. CancelledError: movement likely continues
+            self._tracker.clear_stop_request()
+            raise
 
 
 class SatelGateCover(SatelEntity, CoverEntity):
