@@ -1,4 +1,4 @@
-# Satel INTEGRA Plus
+# Better Satel INTEGRA
 
 A custom [Home Assistant](https://www.home-assistant.io/) integration for
 **Satel INTEGRA** alarm / home-automation panels connected through an
@@ -99,8 +99,8 @@ restart Home Assistant.
 **Manual**: copy `custom_components/satel_integra_plus/` into your HA
 `config/custom_components/` directory and restart.
 
-Then *Settings → Devices & Services → Add Integration → **Satel INTEGRA
-Plus*** and fill in:
+Then *Settings → Devices & Services → Add Integration → **Better Satel
+INTEGRA*** and fill in:
 
 | Field | Meaning |
 |---|---|
@@ -116,7 +116,7 @@ service to refresh the entity list.
 
 ## Options
 
-*Settings → Devices & Services → Satel INTEGRA Plus → Configure*:
+*Settings → Devices & Services → Better Satel INTEGRA → Configure*:
 
 | Option | Default | Meaning |
 |---|---|---|

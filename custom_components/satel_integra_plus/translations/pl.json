@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Połączenie z Satel INTEGRA",
+        "title": "Połączenie z Better Satel INTEGRA",
         "description": "Port integracji ETHM-1 Plus (bez szyfrowania). Hasło użytkownika służy do sterowania (wyjścia, uzbrajanie) — najlepiej utwórz w centrali osobnego użytkownika dla Home Assistant.",
         "data": {
           "host": "Adres",
@@ -24,7 +24,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opcje Satel INTEGRA Plus",
+        "title": "Opcje Better Satel INTEGRA",
         "data": {
           "arm_home_mode": "Tryb uzbrojenia centrali dla „Arm Home” (1-3)",
           "arm_night_mode": "Tryb uzbrojenia centrali dla „Arm Night” (1-3)",

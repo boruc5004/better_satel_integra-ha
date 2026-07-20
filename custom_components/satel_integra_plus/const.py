@@ -1,4 +1,4 @@
-"""Constants for the Satel INTEGRA Plus integration."""
+"""Constants for the Better Satel INTEGRA integration."""
 from __future__ import annotations
 
 DOMAIN = "satel_integra_plus"

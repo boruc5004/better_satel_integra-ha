@@ -1,4 +1,4 @@
-"""Satel INTEGRA Plus — a satel-first Home Assistant integration."""
+"""Better Satel INTEGRA — a Satel-first Home Assistant integration."""
 from __future__ import annotations
 
 import asyncio

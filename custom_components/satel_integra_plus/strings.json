@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Satel INTEGRA",
+        "title": "Connect to Better Satel INTEGRA",
         "description": "ETHM-1 Plus integration port (unencrypted). The user code is used for control commands (outputs, arming) — create a dedicated panel user for Home Assistant.",
         "data": {
           "host": "Host",
@@ -24,7 +24,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Satel INTEGRA Plus options",
+        "title": "Better Satel INTEGRA options",
         "data": {
           "arm_home_mode": "Panel arm mode used for Arm Home (1-3)",
           "arm_night_mode": "Panel arm mode used for Arm Night (1-3)",

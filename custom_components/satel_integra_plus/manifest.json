@@ -1,6 +1,6 @@
 {
   "domain": "satel_integra_plus",
-  "name": "Satel INTEGRA Plus",
+  "name": "Better Satel INTEGRA",
   "codeowners": [
     "@boruc5004"
   ],
@@ -10,5 +10,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/boruc5004/better_satel_integra-ha/issues",
   "requirements": [],
-  "version": "0.1.2"
+  "version": "0.1.3"
 }
