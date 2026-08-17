@@ -1,9 +1,10 @@
 """Covers: roller-blind output pairs (105/106), panel group outputs, gates.
 
-Group behavior: HA cover groups call every member concurrently; the hub's
-client coalesces those into a single 0x88 bitmask frame, so all covers
-actually move. The panel's own group outputs (ROL Parter / ROL Piętro) are
-additionally exposed as first-class covers.
+Group behavior: HA cover groups call every member concurrently. With the
+default zero start delay the client coalesces individual rollers into one 0x88
+bitmask frame; a positive delay serializes their starts. Descriptors marked as
+native groups through the existing uppercase ``ROL `` naming heuristic bypass
+staggering and remain first-class covers driven directly through the panel.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from .mapping import CoverDesc, GateDesc
 from .pysatel.const import Cmd
 from .pysatel.monitor import SatelHub
 from .roller import CLOSED, OPEN, RollerStateTracker
+from .roller_scheduler import RollerStartScheduler
 
 
 async def async_setup_entry(
@@ -33,7 +35,9 @@ async def async_setup_entry(
 ) -> None:
     runtime = entry.runtime_data
     entities: list[CoverEntity] = [
-        SatelRollerCover(runtime.hub, entry.entry_id, desc)
+        SatelRollerCover(
+            runtime.hub, runtime.roller_scheduler, entry.entry_id, desc
+        )
         for desc in runtime.entity_map.covers
     ]
     entities += [
@@ -61,8 +65,15 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
         CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
     )
 
-    def __init__(self, hub: SatelHub, entry_id: str, desc: CoverDesc) -> None:
+    def __init__(
+        self,
+        hub: SatelHub,
+        roller_scheduler: RollerStartScheduler,
+        entry_id: str,
+        desc: CoverDesc,
+    ) -> None:
         super().__init__(hub, entry_id, f"cover_{desc.up_output}", desc.name)
+        self._scheduler = roller_scheduler
         self._up = desc.up_output
         self._down = desc.down_output
         self._is_group = desc.is_group
@@ -116,16 +127,26 @@ class SatelRollerCover(SatelEntity, RestoreEntity, CoverEntity):
             return None
         return self._tracker.last_direction == CLOSED
 
+    async def _async_start(self, output: int) -> None:
+        if self._is_group:
+            # Native SATEL groups are already fanned out inside the panel.
+            await self._hub.client.control_outputs(Cmd.OUTPUTS_ON, {output})
+            sent = True
+        else:
+            sent = await self._scheduler.async_start(self._up, output)
+        # A successfully sent movement supersedes unconsumed stop intent.
+        if sent:
+            self._tracker.clear_stop_request()
+
     async def async_open_cover(self, **kwargs: Any) -> None:
-        await self._hub.client.control_outputs(Cmd.OUTPUTS_ON, {self._up})
-        # a new movement supersedes any not-yet-consumed stop intent
-        self._tracker.clear_stop_request()
+        await self._async_start(self._up)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
-        await self._hub.client.control_outputs(Cmd.OUTPUTS_ON, {self._down})
-        self._tracker.clear_stop_request()
+        await self._async_start(self._down)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
+        if not self._is_group:
+            self._scheduler.cancel(self._up)
         # flag only when actually moving, so stopping a stationary cover
         # cannot poison the next movement's endpoint inference
         self._tracker.note_stop_requested(self.is_opening or self.is_closing)

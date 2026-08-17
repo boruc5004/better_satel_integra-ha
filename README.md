@@ -18,16 +18,16 @@ lights and floor heating. No YAML, no zone lists.
 | Entity names | typed by hand | typed by hand | **read from the panel** |
 | Temperature sensors | ✗ | ✓ (unstable) | ✓ |
 | Roller shutter covers | ✗ (two switches) | ✗ | ✓ **native covers + group outputs** |
-| Cover groups move all covers | ✗ | partially | ✓ (one wire frame per action) |
+| Cover groups move all covers | ✗ | partially | ✓ (batched by default; optional stagger) |
 | Gates / garage doors | switch only | switch only | ✓ covers with open/closed state |
 | Floor heating (thermostat outputs) | ✗ | ✗ | ✓ climate entities |
 | Connection stability | fire-and-forget writes | frequent disconnects | serialized queue, keepalive, auto-reconnect |
 | 256-object panels (INTEGRA 256 Plus) | partial | partial | ✓ extended protocol autodetected |
 
 The connection layer was rebuilt from the protocol specification: exactly one
-command in flight at a time, every response correlated to its request, output
-commands batched into single bitmask frames, idle keepalive under the
-module's 25-second cutoff, and reconnection with backoff. The known failure
+command in flight at a time, every response correlated to its request,
+concurrent same-action output commands batched into bitmask frames, idle
+keepalive under the module's 25-second cutoff, and reconnection with backoff. The known failure
 modes of the older integrations (a slow temperature reply desynchronizing
 the stream, concurrent commands being dropped by the module) are prevented
 structurally, and the test suite simulates a full panel to prove it.
@@ -53,8 +53,12 @@ After setup the integration creates, automatically:
   *closing* while an output runs and remembers the last completed direction.
   Installer whole-group outputs (commonly named `ROL …`) become covers too —
   one tap moves a whole floor using the panel's own grouping.
-  **HA cover groups work correctly**: simultaneous commands from a group are
-  merged into a single panel command, so every member moves.
+  **HA groups made from individual roller entities work correctly**: with the
+  default `0.0` start delay, simultaneous starts are merged into one panel
+  command. An optional per-entry delay instead starts those individual rollers
+  one at a time to reduce simultaneous motor inrush. Panel-native descriptors
+  detected through the existing uppercase `ROL ` naming convention bypass the
+  delay because the panel, not the integration, fans out their motors.
 - **`cover`** (gate/garage) — for momentary (MONO) outputs that drive gates.
   Open/closed state comes from the gate's reed-contact zone, matched by name
   or configured explicitly.
@@ -124,9 +128,31 @@ service to refresh the entity list.
 | Arm night mode | `2` | which panel arm mode HA's *Arm night* uses |
 | Force-arm automatically | on | retry as force-arm when the panel refuses due to violated zones |
 | Comfort/eco output | `0` (off) | output number that switches thermostat thresholds, if you have one |
+| Roller start delay | `0.0` s | minimum interval between individual roller start dispatches (`0` disables staggering; range `0–10` s) |
 | Skip zone patterns | `ASW-*` | comma-separated name patterns of zones to hide (wall-button inputs, logic zones) |
 | Gate state zones | `{}` | JSON: gate output → reed-contact zone |
 | Climate bindings | `{}` | JSON: thermostat output → temperature zone |
+
+### Roller start staggering
+
+Home Assistant invokes members of a cover group concurrently. At the default
+`0.0`, the integration preserves its original behavior and the protocol client
+coalesces individual roller starts into one `OUTPUTS_ON` bitmask frame. With a
+positive **Roller start delay**, individual starts for this config entry are
+queued. Immediately before each dispatch, the scheduler selects the smallest
+currently pending roller up-output, including lower-numbered requests that
+arrived during its sleep. Sender calls never overlap, and each dispatch begins
+at least the configured interval after the previous dispatch began; panel or
+network latency can make observed motor starts later.
+
+Stop is never staggered. It cancels that roller's queued start and is sent
+directly without scheduler delay, so simultaneous group stops can still
+coalesce into one `OUTPUTS_OFF` frame through the client's normal batching.
+Descriptors classified as native groups by the existing,
+case-sensitive uppercase `ROL ` name convention bypass the scheduler; the
+integration cannot split and stagger motors hidden behind such a panel group.
+This option can reduce simultaneous motor inrush, but it is not a remedy for an
+electrical, wiring, or motor fault.
 
 ### The two JSON maps, explained
 

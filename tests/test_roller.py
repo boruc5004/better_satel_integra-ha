@@ -80,6 +80,16 @@ def test_stop_intent_consumed_once():
     assert t.last_direction == CLOSED
 
 
+def test_canceled_queued_start_must_preserve_explicit_stop_intent():
+    t = RollerStateTracker()
+    t.note_stop_requested(moving=True)
+    sent = False
+    if sent:
+        t.clear_stop_request()
+    edge(t, was_down=True)
+    assert t.last_direction == OPEN
+
+
 def test_direction_swap_without_pause_records_final_leg():
     t = RollerStateTracker()
     # up running, user commands close: panel interlock swaps outputs
@@ -120,10 +130,57 @@ def test_stop_handler_flags_only_when_moving_and_unflags_on_failure():
     assert "except BaseException" in stop and "clear_stop_request" in stop
 
 
-def test_movement_handlers_supersede_pending_stop_intent():
-    """Spec 6 wiring: open/close must clear a not-yet-consumed stop intent."""
+def test_movement_handlers_clear_stop_intent_only_after_sent_start():
     body = _class_body("SatelRollerCover")
+    start = body.index("async def _async_start")
+    end = body.index("async def async_open_cover", start)
+    helper = body[start:end]
+    assert "if sent:" in helper
+    assert "clear_stop_request()" in helper
     for handler in ("async_open_cover", "async_close_cover"):
         start = body.index(f"async def {handler}")
         end = body.index("async def", start + 10)
-        assert "clear_stop_request()" in body[start:end], handler
+        assert "_async_start" in body[start:end], handler
+        assert "clear_stop_request()" not in body[start:end], handler
+
+
+def test_individual_roller_start_routing_uses_stable_up_key():
+    setup = COVER_SRC[COVER_SRC.index("async def async_setup_entry"):]
+    setup = setup[:setup.index("class SatelRollerCover")]
+    assert (
+        "SatelRollerCover(\n"
+        "            runtime.hub, runtime.roller_scheduler, entry.entry_id, desc"
+        in setup
+    )
+
+    body = _class_body("SatelRollerCover")
+    assert "self._scheduler = roller_scheduler" in body
+    assert "self._scheduler.async_start(self._up, output)" in body
+    assert "await self._async_start(self._up)" in body
+    assert "await self._async_start(self._down)" in body
+
+
+def test_native_group_bypasses_scheduler_and_clear_depends_on_sent():
+    body = _class_body("SatelRollerCover")
+    helper_start = body.index("async def _async_start")
+    helper_end = body.index("async def async_open_cover", helper_start)
+    helper = body[helper_start:helper_end]
+    assert "if self._is_group:" in helper
+    direct = helper.index("self._hub.client.control_outputs")
+    scheduled = helper.index("self._scheduler.async_start")
+    assert direct < scheduled
+    assert "if sent:\n            self._tracker.clear_stop_request()" in helper
+
+
+def test_stop_cancels_pending_individual_before_direct_off():
+    body = _class_body("SatelRollerCover")
+    start = body.index("async def async_stop_cover")
+    stop = body[start:]
+    cancel_at = stop.index("self._scheduler.cancel(self._up)")
+    off_at = stop.index("Cmd.OUTPUTS_OFF")
+    assert "if not self._is_group:" in stop[:cancel_at]
+    assert cancel_at < off_at
+
+
+def test_gate_cover_remains_scheduler_free():
+    assert "scheduler" not in _class_body("SatelGateCover").lower()

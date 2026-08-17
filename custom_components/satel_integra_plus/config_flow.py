@@ -23,14 +23,17 @@ from .const import (
     CONF_CODE_PREFIX,
     CONF_COMFORT_OUTPUT,
     CONF_GATE_STATE_ZONES,
+    CONF_ROLLER_START_DELAY,
     CONF_SKIP_ZONE_PATTERNS,
     CONF_USER_CODE,
     DEFAULT_ARM_HOME_MODE,
     DEFAULT_ARM_NIGHT_MODE,
     DEFAULT_COMFORT_OUTPUT,
     DEFAULT_FORCE_ARM,
+    DEFAULT_ROLLER_START_DELAY,
     DEFAULT_SKIP_ZONE_PATTERNS,
     DOMAIN,
+    MAX_ROLLER_START_DELAY,
 )
 from .pysatel.client import PanelBusyError, SatelClient
 from .pysatel.const import DEFAULT_PORT
@@ -107,6 +110,7 @@ class SatelOptionsFlow(OptionsFlow):
                     CONF_ARM_NIGHT_MODE: user_input[CONF_ARM_NIGHT_MODE],
                     CONF_FORCE_ARM: user_input[CONF_FORCE_ARM],
                     CONF_COMFORT_OUTPUT: user_input[CONF_COMFORT_OUTPUT],
+                    CONF_ROLLER_START_DELAY: user_input[CONF_ROLLER_START_DELAY],
                     CONF_SKIP_ZONE_PATTERNS: [
                         p.strip()
                         for p in user_input[CONF_SKIP_ZONE_PATTERNS].split(",")
@@ -143,6 +147,16 @@ class SatelOptionsFlow(OptionsFlow):
                     CONF_COMFORT_OUTPUT,
                     default=opts.get(CONF_COMFORT_OUTPUT, DEFAULT_COMFORT_OUTPUT),
                 ): int,
+                vol.Required(
+                    CONF_ROLLER_START_DELAY,
+                    default=opts.get(
+                        CONF_ROLLER_START_DELAY,
+                        DEFAULT_ROLLER_START_DELAY,
+                    ),
+                ): vol.All(
+                    vol.Coerce(float),
+                    vol.Range(min=0.0, max=MAX_ROLLER_START_DELAY),
+                ),
                 vol.Required(
                     CONF_SKIP_ZONE_PATTERNS,
                     default=", ".join(

@@ -15,10 +15,12 @@ from .const import (
     CONF_CLIMATE_BINDINGS,
     CONF_CODE_PREFIX,
     CONF_GATE_STATE_ZONES,
+    CONF_ROLLER_START_DELAY,
     CONF_SKIP_ZONE_PATTERNS,
     CONF_USER_CODE,
     DEFAULT_CLIMATE_BINDINGS,
     DEFAULT_GATE_STATE_ZONES,
+    DEFAULT_ROLLER_START_DELAY,
     DEFAULT_SKIP_ZONE_PATTERNS,
     DOMAIN,
     PLATFORMS,
@@ -26,8 +28,16 @@ from .const import (
     STORAGE_KEY_DISCOVERY,
     STORAGE_VERSION,
 )
+from .lifecycle import (
+    async_cleanup_failed_setup,
+    async_stop_runtime,
+    make_availability_listener,
+    make_stop_listener,
+)
 from .mapping import EntityMap, build_entity_map
+from .pysatel.const import Cmd
 from .pysatel.monitor import Discovery, SatelHub
+from .roller_scheduler import RollerStartScheduler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +51,7 @@ class SatelRuntime:
 
     hub: SatelHub
     entity_map: EntityMap
+    roller_scheduler: RollerStartScheduler
 
 
 # entry.runtime_data holds a SatelRuntime
@@ -98,34 +109,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: SatelConfigEntry) -> boo
             CONF_SKIP_ZONE_PATTERNS, DEFAULT_SKIP_ZONE_PATTERNS
         ),
     )
-    entry.runtime_data = SatelRuntime(hub=hub, entity_map=entity_map)
+    roller_start_delay = float(
+        entry.options.get(
+            CONF_ROLLER_START_DELAY, DEFAULT_ROLLER_START_DELAY
+        )
+    )
+
+    async def _send_roller_start(output: int) -> None:
+        await hub.client.control_outputs(Cmd.OUTPUTS_ON, {output})
+
+    roller_scheduler = RollerStartScheduler(
+        _send_roller_start, delay=roller_start_delay
+    )
+    availability_listener = make_availability_listener(hub, roller_scheduler)
+    hub_unsubscribe = hub.subscribe(availability_listener)
+    if not hub.available:
+        availability_listener()
+
+    entry.runtime_data = SatelRuntime(
+        hub=hub,
+        entity_map=entity_map,
+        roller_scheduler=roller_scheduler,
+    )
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        await async_cleanup_failed_setup(
+            hub, roller_scheduler, hub_unsubscribe
+        )
+        entry.runtime_data = None
+        raise
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     entry.async_on_unload(
         hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STOP, _make_stop_listener(hub)
+            EVENT_HOMEASSISTANT_STOP,
+            make_stop_listener(hub, roller_scheduler),
         )
     )
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(hub_unsubscribe)
     _register_services(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SatelConfigEntry) -> bool:
-    ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    await entry.runtime_data.hub.stop()
+    runtime = entry.runtime_data
+    try:
+        ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    finally:
+        await async_stop_runtime(runtime.hub, runtime.roller_scheduler)
     return ok
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
-
-
-def _make_stop_listener(hub: SatelHub):
-    async def _stop(_event) -> None:
-        await hub.stop()
-
-    return _stop
 
 
 async def _wait_available(hub: SatelHub, timeout: float) -> bool:

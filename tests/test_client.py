@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fake_panel import FakePanel
 from pysatel.client import PanelBusyError, ResponseTimeoutError, SatelClient
 from pysatel.const import Cmd, encode_user_code
+from pysatel.frames import bitmask_to_numbers
+from roller_scheduler import RollerStartScheduler
 
 CODE = "12345678"
 
@@ -67,6 +69,69 @@ async def test_output_control_batches_into_one_frame(client, panel):
     # user code must be in the first 8 bytes
     assert on_frames[0][:8] == encode_user_code(CODE)
     assert len(on_frames[0]) == 8 + 32
+
+
+async def test_zero_delay_scheduler_preserves_one_on_frame(client, panel):
+    async def send_start(output):
+        await client.control_outputs(Cmd.OUTPUTS_ON, {output})
+
+    scheduler = RollerStartScheduler(send_start, delay=0.0)
+    try:
+        await asyncio.gather(
+            scheduler.async_start(49, 49),
+            scheduler.async_start(31, 31),
+            scheduler.async_start(33, 33),
+        )
+    finally:
+        await scheduler.async_close()
+
+    on_frames = [data for cmd, data in panel.received if cmd == Cmd.OUTPUTS_ON]
+    assert len(on_frames) == 1
+    assert bitmask_to_numbers(on_frames[0][8:]) == {31, 33, 49}
+
+
+async def test_positive_delay_scheduler_emits_ordered_single_output_frames(
+    client, panel
+):
+    async def send_start(output):
+        await client.control_outputs(Cmd.OUTPUTS_ON, {output})
+
+    scheduler = RollerStartScheduler(send_start, delay=0.001)
+    try:
+        await asyncio.gather(
+            scheduler.async_start(49, 49),
+            scheduler.async_start(31, 31),
+            scheduler.async_start(33, 33),
+        )
+    finally:
+        await scheduler.async_close()
+
+    on_frames = [data for cmd, data in panel.received if cmd == Cmd.OUTPUTS_ON]
+    assert [bitmask_to_numbers(frame[8:]) for frame in on_frames] == [
+        {31},
+        {33},
+        {49},
+    ]
+
+
+async def test_concurrent_roller_stops_still_batch_into_one_off_frame(
+    client, panel
+):
+    await asyncio.gather(
+        client.control_outputs(Cmd.OUTPUTS_OFF, {31, 32}),
+        client.control_outputs(Cmd.OUTPUTS_OFF, {33, 34}),
+        client.control_outputs(Cmd.OUTPUTS_OFF, {49, 50}),
+    )
+    off_frames = [data for cmd, data in panel.received if cmd == Cmd.OUTPUTS_OFF]
+    assert len(off_frames) == 1
+    assert bitmask_to_numbers(off_frames[0][8:]) == {
+        31,
+        32,
+        33,
+        34,
+        49,
+        50,
+    }
 
 
 async def test_output_on_off_kept_separate(client, panel):

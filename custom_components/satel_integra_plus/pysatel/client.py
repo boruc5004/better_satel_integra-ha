@@ -7,8 +7,8 @@ Reliability rules baked in (per Satel spec and field experience):
 - the panel drops idle connections after ~25 s -> built-in keepalive,
 - the integration port serves ONE client; a second client gets an ASCII
   "Busy!" banner -> surfaced as :class:`PanelBusyError`,
-- output control requests are coalesced into a single bitmask command, so
-  e.g. a Home Assistant cover-group action moves ALL covers with one frame.
+- concurrent same-action output requests are coalesced into bitmask commands;
+  higher layers may deliberately serialize selected individual roller starts.
 """
 from __future__ import annotations
 
@@ -431,9 +431,9 @@ class SatelClient:
     async def control_outputs(self, action: int, outputs: set[int]) -> None:
         """Turn outputs on/off (0x88/0x89), coalescing concurrent requests.
 
-        All requests for the same action arriving within BATCH_WINDOW are
-        merged into ONE bitmask frame — a cover-group action becomes a single
-        wire command instead of N racing ones.
+        Requests for the same action arriving within BATCH_WINDOW are merged
+        into one bitmask frame. Callers that intentionally await one request
+        before submitting the next remain separate; ON and OFF never merge.
         """
         if action not in (Cmd.OUTPUTS_ON, Cmd.OUTPUTS_OFF, Cmd.OUTPUTS_SWITCH):
             raise ValueError(f"not an output control command: {action:#x}")

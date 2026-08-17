@@ -12,7 +12,9 @@
   means a HA cover-group action fans out to N concurrent service calls; with
   a fire-and-forget client the ETHM module executes the first frame and drops
   the rest. The integration protocol natively supports **multi-output
-  bitmasks in a single command** — a group action must become ONE frame.
+  bitmasks in a single command**. Concurrent calls are therefore batched by
+  default; individual roller starts can optionally be serialized before they
+  reach that generic batching layer.
 
 ## Layout
 
@@ -25,7 +27,9 @@ custom_components/satel_integra_plus/
 │   └── monitor.py            # reconnecting hub, discovery, state cache
 ├── __init__.py               # entry setup, discovery cache (Store)
 ├── config_flow.py            # host/port/code + options
+├── lifecycle.py              # HA-free scheduler/hub cleanup callbacks
 ├── mapping.py                # discovery -> entity descriptors (pure)
+├── roller_scheduler.py       # optional per-entry roller start staggering
 ├── entity.py                 # push-updated base entity
 └── <platforms>.py            # alarm_control_panel, binary_sensor, sensor,
                               # cover, light, switch, climate
@@ -46,8 +50,10 @@ through a serialized command path:
   complete a state read.
 - **Batching**: output-control requests (`0x88` on / `0x89` off) accept a set
   of outputs. A ~50 ms coalescing window merges same-action requests into ONE
-  32-byte-bitmask frame — an HA cover-group "close N covers" becomes a single
-  wire command. ON and OFF never merge.
+  32-byte-bitmask frame. Concurrent individual roller starts reach this layer
+  together when their configured start delay is `0.0`; positive-delay starts
+  reach it separately. ON and OFF never merge, and all non-roller callers keep
+  the same generic batching behavior.
 - **Keepalive/watchdog**: the module drops idle connections after ~25 s; the
   client sends a cheap `0x1A` read when outbound-idle. A keepalive timeout is
   treated as a dead (half-open) link and force-drops the connection so the
@@ -67,6 +73,28 @@ through a serialized command path:
 - Reconnect supervisor with exponential backoff; discovery aborts (and is
   never cached) if the connection drops mid-enumeration.
 
+## Individual roller start scheduler (`roller_scheduler.py`)
+
+Each config entry owns one HA-free `RollerStartScheduler`. At delay `0.0`, it
+creates an independently tracked sender task for every caller, preserving the
+client's concurrent batching behavior. At a positive delay, starts for
+individual 105/106 roller pairs are queued by their stable up-output key and
+dispatched one at a time. The first start is immediate; subsequent dispatch
+beginnings have at least the configured start-to-start interval. Selection is
+repeated after each asynchronous sleep so a newly queued lower key, a direction
+replacement, or Stop can change the next action.
+
+Queued directions are last-command-wins. Stop removes a queued start and then
+uses the generic client directly, so OFF calls remain immediate and batchable.
+A disconnect advances the scheduler epoch, fails and cancels old work, and
+allows fresh post-reconnect work without inherited delay. Unload and HA shutdown
+stop the hub before concurrently-idempotent scheduler close drains every worker
+and direct sender task.
+
+Descriptors already classified as native groups by the mapper's existing
+case-sensitive `^ROL\s` name heuristic bypass the scheduler. Their constituent
+motors are hidden behind panel configuration and cannot be staggered here.
+
 ## Discovery (satel-first)
 
 `0xEE` name reads for partitions, zones (device type 5 also returns the
@@ -74,8 +102,9 @@ partition assignment) and outputs return the name plus a type/function byte:
 for outputs the DLOADX function (105/106 roller up/down, 24 MONO, 25 BI,
 120 thermostat), for zones the reaction type. Mapping rules (`mapping.py`):
 
-- consecutive 105+106 output pairs → `cover` (installer group outputs
-  detected by the common `ROL ` naming convention are covers too)
+- consecutive 105+106 output pairs → `cover` (installer group descriptors
+  detected by the existing uppercase `ROL ` naming convention are covers too
+  and bypass individual start staggering)
 - MONO outputs named as gates → `cover` (gate/garage) with a reed-contact
   state zone bound by identical normalized name, overridable via options
 - BI outputs named as lighting → `light`, other controllable outputs → `switch`

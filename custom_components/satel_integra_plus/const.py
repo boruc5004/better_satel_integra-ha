@@ -11,6 +11,7 @@ CONF_GATE_STATE_ZONES = "gate_state_zones"
 CONF_CLIMATE_BINDINGS = "climate_bindings"
 CONF_COMFORT_OUTPUT = "comfort_output"
 CONF_SKIP_ZONE_PATTERNS = "skip_zone_patterns"
+CONF_ROLLER_START_DELAY = "roller_start_delay"
 
 CONF_FORCE_ARM = "force_arm"
 
@@ -18,6 +19,8 @@ DEFAULT_ARM_HOME_MODE = 3
 DEFAULT_ARM_NIGHT_MODE = 2
 DEFAULT_COMFORT_OUTPUT = 0  # 0 = no comfort/eco preset until configured
 DEFAULT_FORCE_ARM = True
+DEFAULT_ROLLER_START_DELAY = 0.0
+MAX_ROLLER_START_DELAY = 10.0
 
 # Zone-name patterns that never become entities (fnmatch-style). ASW-* are
 # Satel wireless wall-button modules whose inputs are panel-internal wiring,
